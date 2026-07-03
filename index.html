@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>GSB 2026 — tracker wyprawy</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --spruce:#1e2a22;        /* atrament / świerk */
+    --moss:#eef2ea;          /* tło — blade mchy */
+    --trail-red:#c8102e;     /* czerwień szlaku PTTK */
+    --sign-yellow:#f2c014;   /* żółć drogowskazów */
+    --paper:#ffffff;
+    --muted:#6b7a6f;
+    --line:#d7ded4;
+    --done:#2f7d4f;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:'Inter',system-ui,sans-serif;
+    background:var(--moss);
+    color:var(--spruce);
+    /* subtelne poziomice jak na mapie topo */
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420' viewBox='0 0 420 420'%3E%3Cg fill='none' stroke='%231e2a22' stroke-opacity='0.045' stroke-width='1.2'%3E%3Cpath d='M-20 340 C 80 260, 150 380, 250 300 S 430 320, 460 240'/%3E%3Cpath d='M-20 300 C 80 220, 160 340, 260 260 S 430 280, 460 200'/%3E%3Cpath d='M-20 260 C 90 180, 170 300, 270 220 S 430 240, 460 160'/%3E%3Cpath d='M-20 220 C 100 140, 180 260, 280 180 S 430 200, 460 120'/%3E%3C/g%3E%3C/svg%3E");
+  }
+  .wrap{max-width:920px;margin:0 auto;padding:20px 16px 80px}
+
+  /* ---------- nagłówek ---------- */
+  header{padding:26px 0 18px}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;
+    font-family:'Archivo',sans-serif;font-stretch:75%;font-weight:700;
+    font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    background:var(--sign-yellow);color:var(--spruce);
+    padding:5px 12px;clip-path:polygon(0 0,calc(100% - 10px) 0,100% 50%,calc(100% - 10px) 100%,0 100%);
+  }
+  h1{
+    font-family:'Archivo',sans-serif;font-stretch:110%;font-weight:800;
+    font-size:clamp(30px,6vw,52px);line-height:1.02;margin:12px 0 6px;
+    text-transform:uppercase;letter-spacing:-0.01em;
+  }
+  h1 .thin{font-weight:400;font-stretch:75%}
+  .sub{color:var(--muted);font-size:14px}
+  .sub b{color:var(--spruce)}
+
+  /* ---------- znak szlaku = pasek postępu ---------- */
+  .blaze-card{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:18px;margin:18px 0;box-shadow:0 2px 10px rgba(30,42,34,.05)}
+  .blaze-label{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;font-family:'Archivo',sans-serif;font-stretch:75%;font-weight:700;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .blaze-label .pct{font-size:26px;font-stretch:110%;font-weight:800;color:var(--trail-red);letter-spacing:0}
+  .blaze{position:relative;height:34px;border:2px solid var(--spruce);border-radius:6px;overflow:hidden;background:repeating-linear-gradient(45deg,#e7ece3 0 8px,#dfe6db 8px 16px)}
+  .blaze .fill{
+    position:absolute;inset:0;width:0%;
+    background:linear-gradient(to bottom,#fff 0 33.4%,var(--trail-red) 33.4% 66.7%,#fff 66.7% 100%);
+    border-right:2px solid var(--spruce);
+    transition:width .9s cubic-bezier(.2,.8,.2,1);
+  }
+  .blaze .hiker{position:absolute;top:50%;transform:translate(-60%,-54%);left:0;font-size:22px;transition:left .9s cubic-bezier(.2,.8,.2,1);filter:drop-shadow(0 1px 1px rgba(0,0,0,.25))}
+  .blaze-ends{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px}
+
+  /* ---------- statystyki ---------- */
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0}
+  @media(max-width:640px){.stats{grid-template-columns:1fr}}
+  .stat{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .stat h3{font-family:'Archivo',sans-serif;font-stretch:75%;font-weight:700;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  .stat .big{font-family:'Archivo',sans-serif;font-stretch:110%;font-weight:800;font-size:30px;line-height:1}
+  .stat .big small{font-size:15px;font-weight:600;color:var(--muted)}
+  .stat .left{font-size:12.5px;color:var(--muted);margin-top:4px}
+  .mini{height:6px;border-radius:3px;background:#e5eae1;margin-top:10px;overflow:hidden}
+  .mini i{display:block;height:100%;width:0%;background:var(--trail-red);border-radius:3px;transition:width .9s}
+
+  /* ---------- mapa ---------- */
+  .map-card{background:var(--paper);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin:18px 0}
+  #map{height:420px;width:100%}
+  @media(max-width:640px){#map{height:340px}}
+  .map-legend{display:flex;gap:18px;flex-wrap:wrap;padding:10px 16px;font-size:12.5px;color:var(--muted);border-top:1px solid var(--line)}
+  .lg{display:inline-flex;align-items:center;gap:6px}
+  .lg .sw{width:22px;height:0;border-top:4px solid var(--trail-red);border-radius:2px}
+  .lg .sw.todo{border-top:4px dashed #9aa79d}
+
+  /* ---------- lista dni ---------- */
+  h2{font-family:'Archivo',sans-serif;font-stretch:110%;font-weight:800;font-size:20px;text-transform:uppercase;margin:26px 0 12px;display:flex;align-items:center;gap:10px}
+  h2::after{content:"";flex:1;height:2px;background:linear-gradient(to right,var(--spruce),transparent)}
+  .day{
+    display:grid;grid-template-columns:auto auto 1fr auto;gap:12px;align-items:center;
+    background:var(--paper);border:1px solid var(--line);border-radius:12px;
+    padding:12px 14px;margin-bottom:8px;transition:background .3s,border-color .3s;
+  }
+  .day.done{background:#f2f8f1;border-color:#bcd8c2}
+  .day.rest{border-style:dashed}
+  .day .num{
+    font-family:'Archivo',sans-serif;font-stretch:110%;font-weight:800;font-size:18px;
+    width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+    background:var(--spruce);color:#fff;flex-direction:column;line-height:1;
+  }
+  .day .num small{font-size:8.5px;font-weight:600;letter-spacing:.08em;opacity:.75}
+  .day.done .num{background:var(--done)}
+  .chk{width:26px;height:26px;border:2px solid var(--spruce);border-radius:7px;display:flex;align-items:center;justify-content:center;background:#fff;cursor:default;font-size:15px;color:transparent;flex:none}
+  .day.done .chk{background:var(--done);border-color:var(--done);color:#fff}
+  body.admin .chk{cursor:pointer;box-shadow:0 0 0 3px rgba(200,16,46,.12)}
+  .day .info .route{font-weight:600;font-size:15px}
+  .day .info .route .arrow{color:var(--trail-red);font-weight:800}
+  .day .info .meta{font-size:12.5px;color:var(--muted);margin-top:3px}
+  .day .badges{display:flex;gap:6px;flex-direction:column;align-items:flex-end}
+  .badge{font-family:'Archivo',sans-serif;font-stretch:75%;font-weight:700;font-size:11.5px;letter-spacing:.05em;padding:3px 9px;border-radius:20px;white-space:nowrap}
+  .badge.km{background:#e9efe6;color:var(--spruce)}
+  .badge.got{background:var(--sign-yellow);color:var(--spruce)}
+  @media(max-width:560px){
+    .day{grid-template-columns:auto auto 1fr}
+    .day .badges{grid-column:1/-1;flex-direction:row;justify-content:flex-start;margin-top:2px}
+  }
+
+  .note{font-size:12px;color:var(--muted);margin-top:14px;line-height:1.5}
+
+  /* ---------- pasek admina ---------- */
+  .adminbar{
+    position:fixed;left:0;right:0;bottom:0;display:none;justify-content:center;gap:10px;
+    padding:12px;background:rgba(30,42,34,.96);backdrop-filter:blur(4px);z-index:1000;
+  }
+  body.admin .adminbar{display:flex}
+  .adminbar .status{color:#cfe0d2;font-size:13px;align-self:center}
+  .btn{
+    font-family:'Archivo',sans-serif;font-weight:700;font-size:14px;letter-spacing:.03em;
+    border:none;border-radius:9px;padding:10px 18px;cursor:pointer;
+  }
+  .btn.save{background:var(--sign-yellow);color:var(--spruce)}
+  .btn.save:disabled{opacity:.45;cursor:default}
+  .btn.ghost{background:transparent;color:#cfe0d2;border:1px solid #587161}
+  .adminlink{display:block;text-align:center;margin-top:26px;font-size:12px;color:var(--muted);background:none;border:none;cursor:pointer;text-decoration:underline;width:100%}
+
+  /* ---------- bramka hasła ---------- */
+  #gate{position:fixed;inset:0;background:var(--spruce);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px}
+  #gate .box{max-width:360px;width:100%;text-align:center;color:#eef2ea}
+  #gate .blazeicon{width:70px;height:46px;margin:0 auto 18px;border:2px solid #eef2ea;border-radius:6px;background:linear-gradient(to bottom,#fff 0 33.4%,var(--trail-red) 33.4% 66.7%,#fff 66.7% 100%)}
+  #gate h1{font-size:26px;color:#fff;margin-bottom:4px}
+  #gate p{font-size:13.5px;color:#a9bcae;margin-bottom:18px}
+  #gate input{width:100%;padding:12px 14px;border-radius:9px;border:1px solid #587161;background:#16211a;color:#fff;font-size:16px;text-align:center;letter-spacing:.1em}
+  #gate button{margin-top:12px;width:100%;background:var(--trail-red);color:#fff}
+  #gate .err{color:#ffb3b3;font-size:13px;margin-top:10px;min-height:18px}
+
+  .toast{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:var(--spruce);color:#fff;padding:10px 18px;border-radius:9px;font-size:14px;z-index:3000;opacity:0;transition:opacity .3s;pointer-events:none}
+  .toast.show{opacity:1}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<!-- ======== BRAMKA HASŁA ======== -->
+<div id="gate">
+  <div class="box">
+    <div class="blazeicon" aria-hidden="true"></div>
+    <h1>GSB 2026</h1>
+    <p>Strona wyprawy. Podaj hasło, aby zobaczyć postępy.</p>
+    <input id="pw" type="password" placeholder="hasło" autocomplete="current-password">
+    <button class="btn" id="pwbtn">Wejdź na szlak</button>
+    <div class="err" id="pwerr"></div>
+  </div>
+</div>
+
+<div class="wrap" id="app" style="visibility:hidden">
+  <header>
+    <span class="eyebrow">Szlak czerwony · im. K. Sosnowskiego</span>
+    <h1>Główny Szlak<br>Beskidzki <span class="thin">2026</span></h1>
+    <div class="sub">Wołosate → Ustroń · 28 czerwca – 18 lipca · <b id="subDays"></b></div>
+  </header>
+
+  <!-- znak szlaku jako główny pasek postępu -->
+  <div class="blaze-card">
+    <div class="blaze-label"><span>Przebyta trasa</span><span class="pct" id="pct">0%</span></div>
+    <div class="blaze" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="blazeBar">
+      <div class="fill" id="blazeFill"></div>
+      <div class="hiker" id="hiker">🥾</div>
+    </div>
+    <div class="blaze-ends"><span>Wołosate</span><span>Ustroń</span></div>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <h3>Dni na szlaku</h3>
+      <div class="big"><span id="dDone">0</span><small> / <span id="dTotal"></span></small></div>
+      <div class="left" id="dLeft"></div>
+      <div class="mini"><i id="dBar"></i></div>
+    </div>
+    <div class="stat">
+      <h3>Kilometry</h3>
+      <div class="big"><span id="kDone">0</span><small> / <span id="kTotal"></span> km</small></div>
+      <div class="left" id="kLeft"></div>
+      <div class="mini"><i id="kBar"></i></div>
+    </div>
+    <div class="stat">
+      <h3>Punkty GOT</h3>
+      <div class="big"><span id="gDone">0</span><small> / <span id="gTotal"></span> pkt</small></div>
+      <div class="left" id="gLeft"></div>
+      <div class="mini"><i id="gBar"></i></div>
+    </div>
+  </div>
+
+  <div class="map-card">
+    <div id="map"></div>
+    <div class="map-legend">
+      <span class="lg"><span class="sw"></span> przebyte</span>
+      <span class="lg"><span class="sw todo"></span> przed nami</span>
+      <span class="lg">⛺ noclegi na końcach etapów</span>
+    </div>
+  </div>
+
+  <h2>Etapy</h2>
+  <div id="days"></div>
+
+  <p class="note">
+    Kilometraż etapów jest orientacyjny (na podstawie typowego przebiegu GSB) — punkty GOT wg planu wyprawy.
+    Ostatnia aktualizacja postępu: <b id="lastUpd">—</b>.
+  </p>
+
+  <button class="adminlink" id="adminToggle">tryb administratora</button>
+</div>
+
+<!-- pasek admina -->
+<div class="adminbar">
+  <span class="status" id="adminStatus">Tryb administratora — klikaj kwadraciki przy dniach</span>
+  <button class="btn save" id="saveBtn" disabled>Zapisz postęp</button>
+  <button class="btn ghost" id="logoutBtn">Wyjdź</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* =====================================================================
+   KONFIGURACJA — uzupełnij po utworzeniu repozytorium na GitHubie
+   ===================================================================== */
+const CONFIG = {
+  ghOwner:  "TWOJ-LOGIN-GITHUB",   // np. "janburdziej"
+  ghRepo:   "gsb-2026",            // nazwa repozytorium
+  ghBranch: "main",
+  // SHA-256 hasła dostępu (domyślne hasło: GSB2026).
+  // Nowy hash wygenerujesz otwierając stronę z ?genhash=twoje-haslo
+  passHash: "379bd49c00b330e2d14b4a6c652e8a0136a6f62e5b02e7f855ed393a481ec5b2"
+};
+
+/* =====================================================================
+   PLAN WYPRAWY — km orientacyjne, GOT wg planu. Edytuj śmiało.
+   lat/lng = koniec etapu (nocleg). START = Wołosate.
+   ===================================================================== */
+const START = { name: "Wołosate", lat: 49.065, lng: 22.685 };
+const DAYS = [
+  {d:1,  date:"28.06", od:"Wołosate",        do:"Ustrzyki Górne",          km:20, got:33, nocleg:"Hotel PTTK Ustrzyki Górne",      lat:49.098, lng:22.653},
+  {d:2,  date:"29.06", od:"Ustrzyki Górne",  do:"Smerek",                  km:25, got:40, nocleg:"Smerek",                          lat:49.180, lng:22.505},
+  {d:3,  date:"30.06", od:"Smerek",          do:"Cisna",                   km:17, got:24, nocleg:"Bacówka pod Honem",               lat:49.213, lng:22.328},
+  {d:4,  date:"01.07", od:"Cisna",           do:"Komańcza",                km:30, got:39, nocleg:"PTTK Komańcza",                   lat:49.336, lng:22.065},
+  {d:5,  date:"02.07", od:"Komańcza",        do:"Wisłoczek",               km:33, got:41, nocleg:"Baza namiotowa Wisłoczek ⚡brak", lat:49.463, lng:21.885},
+  {d:6,  date:"03.07", od:"Wisłoczek",       do:"Chyrowa",                 km:35, got:44, nocleg:"Schronisko pod Chyrową",          lat:49.517, lng:21.643},
+  {d:7,  date:"04.07", od:"Chyrowa",         do:"Bartne",                  km:33, got:43, nocleg:"Bacówka PTTK Bartne",             lat:49.529, lng:21.348},
+  {d:8,  date:"05.07", od:"Bartne",          do:"Regietów",                km:21, got:27, nocleg:"Baza namiotowa Regietów ⚡brak",  lat:49.462, lng:21.174},
+  {d:9,  date:"06.07", od:"Regietów",        do:"Krynica-Zdrój",           km:33, got:41, nocleg:"Krynica-Zdrój",                   lat:49.422, lng:20.960},
+  {d:10, date:"07.07", od:"Krynica-Zdrój",   do:"Rytro (Cyrla)",           km:26, got:33, nocleg:"Cyrla",                           lat:49.481, lng:20.678},
+  {d:11, date:"08.07", od:"Rytro",           do:"Przehyba",                km:16, got:28, nocleg:"PTTK Przehyba",                   lat:49.435, lng:20.570},
+  {d:12, date:"09.07", od:"Przehyba",        do:"Lubań",                   km:24, got:30, nocleg:"Baza namiotowa Lubań ⚡brak",     lat:49.464, lng:20.390},
+  {d:13, date:"10.07", od:"Lubań",           do:"Turbacz",                 km:26, got:33, nocleg:"PTTK Turbacz",                    lat:49.543, lng:20.112},
+  {d:14, date:"11.07", od:"Turbacz",         do:"Rabka-Zdrój",             km:14, got:17, nocleg:"Rabka-Zdrój",                     lat:49.609, lng:19.965},
+  {d:15, date:"12.07", od:"Rabka-Zdrój",     do:"dzień odpoczynku 😴",     km:0,  got:0,  nocleg:"Rabka-Zdrój", rest:true,          lat:49.609, lng:19.965},
+  {d:16, date:"13.07", od:"Rabka-Zdrój",     do:"Hala Krupowa",            km:33, got:41, nocleg:"PTTK Hala Krupowa",               lat:49.575, lng:19.630},
+  {d:17, date:"14.07", od:"Hala Krupowa",    do:"Głuchaczki",              km:30, got:40, nocleg:"Baza namiotowa Głuchaczki",       lat:49.556, lng:19.420},
+  {d:18, date:"15.07", od:"Głuchaczki",      do:"Hala Lipowska",           km:26, got:33, nocleg:"PTTK Hala Lipowska / Rysianka",   lat:49.524, lng:19.297},
+  {d:19, date:"16.07", od:"Hala Lipowska",   do:"Przysłop p. Baranią Górą",km:34, got:41, nocleg:"PTTK Przysłop",                   lat:49.633, lng:18.980},
+  {d:20, date:"17.07", od:"Przysłop",        do:"Stożek",                  km:16, got:21, nocleg:"PTTK Stożek",                     lat:49.610, lng:18.786},
+  {d:21, date:"18.07", od:"Stożek",          do:"Ustroń 🏁",               km:22, got:29, nocleg:"powrót do domu",                  lat:49.719, lng:18.803},
+];
+
+/* ===================== stan ===================== */
+let completed = new Set();      // numery ukończonych dni
+let dirty = false;
+let map, doneLine, todoLine, markers = [];
+
+const $ = id => document.getElementById(id);
+const sum = (arr, f) => arr.reduce((a, x) => a + f(x), 0);
+
+/* ===================== bramka hasła ===================== */
+async function sha256(txt){
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(txt));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+async function tryUnlock(){
+  const v = $("pw").value.trim();
+  if (!v) return;
+  let h = "";
+  try { h = await sha256(v); }
+  catch(e){ $("pwerr").textContent = "Przeglądarka blokuje kryptografię — otwórz stronę przez https."; return; }
+  if (h === CONFIG.passHash){
+    sessionStorage.setItem("gsb_auth", "1");
+    openApp();
+  } else {
+    $("pwerr").textContent = "Nieprawidłowe hasło.";
+    $("pw").value = "";
+  }
+}
+function openApp(){
+  $("gate").style.display = "none";
+  $("app").style.visibility = "visible";
+  initMap();
+  render();
+  loadProgress();
+  setInterval(loadProgress, 5 * 60 * 1000);           // odświeżanie co 5 min
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && !document.body.classList.contains("admin")) loadProgress();
+  });
+}
+
+/* generator hasha: strona.html?genhash=moje-haslo */
+(async () => {
+  const gh = new URLSearchParams(location.search).get("genhash");
+  if (gh){
+    const h = await sha256(gh);
+    document.body.innerHTML =
+      "<div style='font-family:monospace;padding:30px;word-break:break-all'>" +
+      "<b>SHA-256 dla podanego hasła:</b><br><br>" + h +
+      "<br><br>Wklej tę wartość do CONFIG.passHash w index.html.</div>";
+    throw new Error("genhash mode");
+  }
+  if (sessionStorage.getItem("gsb_auth") === "1") openApp();
+})();
+$("pwbtn").addEventListener("click", tryUnlock);
+$("pw").addEventListener("keydown", e => { if (e.key === "Enter") tryUnlock(); });
+
+/* ===================== wczytywanie postępu ===================== */
+async function loadProgress(){
+  try {
+    const r = await fetch("progress.json?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) throw 0;
+    const j = await r.json();
+    completed = new Set(j.completed || []);
+    $("lastUpd").textContent = j.updated || "—";
+    dirty = false;
+    render();
+  } catch(e){
+    /* podgląd lokalny bez progress.json — start od zera */
+  }
+}
+
+/* ===================== renderowanie ===================== */
+function render(){
+  const total  = DAYS.length;
+  const doneD  = DAYS.filter(x => completed.has(x.d));
+  const kmT    = sum(DAYS, x => x.km),  kmD = sum(doneD, x => x.km);
+  const gotT   = sum(DAYS, x => x.got), gotD = sum(doneD, x => x.got);
+  const pct    = kmT ? Math.round(kmD / kmT * 100) : 0;
+
+  $("subDays").textContent = total + " etapów · ok. " + kmT + " km · " + gotT + " pkt GOT";
+  $("pct").textContent = pct + "%";
+  $("blazeFill").style.width = pct + "%";
+  $("hiker").style.left = pct + "%";
+  $("blazeBar").setAttribute("aria-valuenow", pct);
+
+  $("dDone").textContent = doneD.length; $("dTotal").textContent = total;
+  $("dLeft").textContent = "zostało " + (total - doneD.length) + " dni";
+  $("dBar").style.width = (doneD.length / total * 100) + "%";
+
+  $("kDone").textContent = kmD; $("kTotal").textContent = kmT;
+  $("kLeft").textContent = "zostało " + (kmT - kmD) + " km";
+  $("kBar").style.width = (kmT ? kmD / kmT * 100 : 0) + "%";
+
+  $("gDone").textContent = gotD; $("gTotal").textContent = gotT;
+  $("gLeft").textContent = "zostało " + (gotT - gotD) + " pkt";
+  $("gBar").style.width = (gotT ? gotD / gotT * 100 : 0) + "%";
+
+  /* lista dni */
+  const box = $("days");
+  box.innerHTML = "";
+  DAYS.forEach(x => {
+    const done = completed.has(x.d);
+    const el = document.createElement("div");
+    el.className = "day" + (done ? " done" : "") + (x.rest ? " rest" : "");
+    el.innerHTML =
+      '<div class="num">' + x.d + "<small>" + x.date + "</small></div>" +
+      '<div class="chk" role="checkbox" aria-checked="' + done + '" tabindex="0">✓</div>' +
+      '<div class="info">' +
+        '<div class="route">' + x.od + ' <span class="arrow">→</span> ' + x.do + "</div>" +
+        '<div class="meta">⛺ ' + x.nocleg + "</div>" +
+      "</div>" +
+      '<div class="badges">' +
+        '<span class="badge km">' + x.km + " km</span>" +
+        '<span class="badge got">GOT ' + x.got + "</span>" +
+      "</div>";
+    const chk = el.querySelector(".chk");
+    const toggle = () => {
+      if (!document.body.classList.contains("admin")) return;
+      completed.has(x.d) ? completed.delete(x.d) : completed.add(x.d);
+      dirty = true;
+      $("saveBtn").disabled = false;
+      render();
+    };
+    chk.addEventListener("click", toggle);
+    chk.addEventListener("keydown", e => { if (e.key === " " || e.key === "Enter"){ e.preventDefault(); toggle(); } });
+    box.appendChild(el);
+  });
+
+  renderMapProgress();
+}
+
+/* ===================== mapa ===================== */
+function initMap(){
+  if (map) return;
+  map = L.map("map", { scrollWheelZoom: false });
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 15,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  }).addTo(map);
+  const all = [[START.lat, START.lng], ...DAYS.map(x => [x.lat, x.lng])];
+  map.fitBounds(L.latLngBounds(all), { padding: [24, 24] });
+}
+function renderMapProgress(){
+  if (!map) return;
+  if (doneLine) map.removeLayer(doneLine);
+  if (todoLine) map.removeLayer(todoLine);
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+
+  /* trasa przebiega przez kolejne noclegi — kolor wg statusu segmentu */
+  const pts = [[START.lat, START.lng], ...DAYS.map(x => [x.lat, x.lng])];
+  const donePts = [pts[0]];
+  let i = 0;
+  while (i < DAYS.length && completed.has(DAYS[i].d)){ donePts.push(pts[i + 1]); i++; }
+  const todoPts = pts.slice(i);
+
+  if (donePts.length > 1)
+    doneLine = L.polyline(donePts, { color: "#c8102e", weight: 5, opacity: .95 }).addTo(map);
+  if (todoPts.length > 1)
+    todoLine = L.polyline(todoPts, { color: "#7d8a80", weight: 3, dashArray: "6 8", opacity: .8 }).addTo(map);
+
+  const mk = (lat, lng, done, html, start) => {
+    const m = L.circleMarker([lat, lng], {
+      radius: start ? 8 : 6,
+      color: "#1e2a22", weight: 2,
+      fillColor: done ? "#c8102e" : "#ffffff", fillOpacity: 1
+    }).addTo(map).bindPopup(html);
+    markers.push(m);
+  };
+  mk(START.lat, START.lng, true, "<b>START · Wołosate</b>", true);
+  DAYS.forEach(x => {
+    mk(x.lat, x.lng, completed.has(x.d),
+      "<b>Dzień " + x.d + " · " + x.date + "</b><br>" + x.od + " → " + x.do +
+      "<br>" + x.km + " km · GOT " + x.got + "<br>⛺ " + x.nocleg);
+  });
+}
+
+/* ===================== tryb administratora ===================== */
+function enterAdmin(){
+  document.body.classList.add("admin");
+  $("saveBtn").disabled = !dirty;
+}
+$("adminToggle").addEventListener("click", () => {
+  let tok = localStorage.getItem("gsb_token");
+  if (!tok){
+    tok = prompt("Wklej swój GitHub token (fine-grained, dostęp tylko do tego repo).\nToken zapisze się wyłącznie w tej przeglądarce.");
+    if (!tok) return;
+    localStorage.setItem("gsb_token", tok.trim());
+  }
+  enterAdmin();
+});
+$("logoutBtn").addEventListener("click", () => {
+  if (confirm("Wyjść z trybu administratora?\nOK = tylko wyjdź · po wyjściu token zostaje w tej przeglądarce.")){
+    document.body.classList.remove("admin");
+  }
+});
+
+/* zapis przez GitHub API */
+$("saveBtn").addEventListener("click", async () => {
+  const tok = localStorage.getItem("gsb_token");
+  if (!tok) return;
+  const api = "https://api.github.com/repos/" + CONFIG.ghOwner + "/" + CONFIG.ghRepo + "/contents/progress.json";
+  const headers = {
+    "Authorization": "Bearer " + tok,
+    "Accept": "application/vnd.github+json"
+  };
+  $("saveBtn").disabled = true;
+  $("adminStatus").textContent = "Zapisywanie…";
+  try {
+    /* pobierz aktualne SHA pliku */
+    const cur = await fetch(api + "?ref=" + CONFIG.ghBranch, { headers });
+    let sha;
+    if (cur.ok) sha = (await cur.json()).sha;
+    else if (cur.status !== 404) throw new Error("GET " + cur.status);
+
+    const body = {
+      message: "Aktualizacja postępu — " + new Date().toLocaleString("pl-PL"),
+      branch: CONFIG.ghBranch,
+      content: btoa(unescape(encodeURIComponent(JSON.stringify({
+        completed: [...completed].sort((a, b) => a - b),
+        updated: new Date().toLocaleString("pl-PL")
+      }, null, 2))))
+    };
+    if (sha) body.sha = sha;
+
+    const put = await fetch(api, { method: "PUT", headers, body: JSON.stringify(body) });
+    if (!put.ok) throw new Error("PUT " + put.status);
+    dirty = false;
+    $("adminStatus").textContent = "Zapisano ✔ (strona publiczna odświeży się do ok. 1 min)";
+    toast("Postęp zapisany na GitHubie ✔");
+    $("lastUpd").textContent = new Date().toLocaleString("pl-PL");
+  } catch(e){
+    $("adminStatus").textContent = "Błąd zapisu: " + e.message + " — sprawdź token i CONFIG.";
+    $("saveBtn").disabled = false;
+    if (String(e.message).includes("401")) localStorage.removeItem("gsb_token");
+  }
+});
+
+function toast(msg){
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 3000);
+}
+</script>
+</body>
+</html>
