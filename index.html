@@ -18,6 +18,7 @@
     --muted:#6b7a6f;
     --line:#d7ded4;
     --done:#2f7d4f;
+    --tabbar-h:60px;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html{scroll-behavior:smooth}
@@ -28,10 +29,20 @@
     /* subtelne poziomice jak na mapie topo */
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420' viewBox='0 0 420 420'%3E%3Cg fill='none' stroke='%231e2a22' stroke-opacity='0.045' stroke-width='1.2'%3E%3Cpath d='M-20 340 C 80 260, 150 380, 250 300 S 430 320, 460 240'/%3E%3Cpath d='M-20 300 C 80 220, 160 340, 260 260 S 430 280, 460 200'/%3E%3Cpath d='M-20 260 C 90 180, 170 300, 270 220 S 430 240, 460 160'/%3E%3Cpath d='M-20 220 C 100 140, 180 260, 280 180 S 430 200, 460 120'/%3E%3C/g%3E%3C/svg%3E");
   }
-  .wrap{max-width:920px;margin:0 auto;padding:20px 16px 80px}
+  .wrap{max-width:920px;margin:0 auto;padding:20px 16px calc(var(--tabbar-h) + 28px + env(safe-area-inset-bottom,0px))}
 
   /* ---------- nagłówek ---------- */
   header{padding:26px 0 18px}
+  .header-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  .admin-icon-btn{
+    flex:none;width:34px;height:34px;margin-top:1px;border-radius:9px;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--paper);border:1px solid var(--line);color:var(--muted);cursor:pointer;
+    transition:background .2s,color .2s,border-color .2s;
+  }
+  .admin-icon-btn svg{width:18px;height:18px}
+  .admin-icon-btn:hover{color:var(--spruce);border-color:var(--spruce)}
+  body.admin .admin-icon-btn{background:var(--spruce);border-color:var(--spruce);color:var(--sign-yellow)}
   .eyebrow{
     display:inline-flex;align-items:center;gap:8px;
     font-family:'Archivo',sans-serif;font-stretch:75%;font-weight:700;
@@ -82,6 +93,30 @@
   .lg .sw{width:22px;height:0;border-top:4px solid var(--trail-red);border-radius:2px}
   .lg .sw.todo{border-top:4px dashed #9aa79d}
 
+  /* ---------- zakładki ---------- */
+  .tab-panel{display:none}
+  .tab-panel.active{display:block}
+
+  .tabbar{
+    position:fixed;left:0;right:0;bottom:0;z-index:900;
+    display:flex;height:var(--tabbar-h);
+    background:var(--spruce);box-shadow:0 -2px 12px rgba(0,0,0,.18);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  .tabbar button{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    background:none;border:none;color:#9fb2a4;cursor:pointer;position:relative;
+    font-family:'Archivo',sans-serif;font-stretch:75%;font-weight:700;
+    font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;
+  }
+  .tabbar button .ic{width:21px;height:21px}
+  .tabbar button.active{color:#fff}
+  .tabbar button.active::before{
+    content:"";position:absolute;top:0;left:26%;right:26%;height:3px;
+    background:var(--sign-yellow);border-radius:0 0 3px 3px;
+  }
+  body.admin .tabbar{bottom:60px}
+
   /* ---------- lista dni ---------- */
   h2{font-family:'Archivo',sans-serif;font-stretch:110%;font-weight:800;font-size:20px;text-transform:uppercase;margin:26px 0 12px;display:flex;align-items:center;gap:10px}
   h2::after{content:"";flex:1;height:2px;background:linear-gradient(to right,var(--spruce),transparent)}
@@ -118,7 +153,7 @@
 
   /* ---------- pasek admina ---------- */
   .adminbar{
-    position:fixed;left:0;right:0;bottom:0;display:none;justify-content:center;gap:10px;
+    position:fixed;left:0;right:0;bottom:60px;display:none;justify-content:center;gap:10px;
     padding:12px;background:rgba(30,42,34,.96);backdrop-filter:blur(4px);z-index:1000;
   }
   body.admin .adminbar{display:flex}
@@ -130,7 +165,6 @@
   .btn.save{background:var(--sign-yellow);color:var(--spruce)}
   .btn.save:disabled{opacity:.45;cursor:default}
   .btn.ghost{background:transparent;color:#cfe0d2;border:1px solid #587161}
-  .adminlink{display:block;text-align:center;margin-top:26px;font-size:12px;color:var(--muted);background:none;border:none;cursor:pointer;text-decoration:underline;width:100%}
 
   /* ---------- bramka hasła ---------- */
   #gate{position:fixed;inset:0;background:var(--spruce);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px}
@@ -163,61 +197,90 @@
 
 <div class="wrap" id="app" style="visibility:hidden">
   <header>
-    <span class="eyebrow">Szlak czerwony · im. K. Sosnowskiego</span>
+    <div class="header-top">
+      <span class="eyebrow">Szlak czerwony · im. K. Sosnowskiego</span>
+      <button type="button" class="admin-icon-btn" id="adminToggle" aria-label="Tryb administratora" title="Tryb administratora">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
     <h1>Główny Szlak<br>Beskidzki <span class="thin">2026</span></h1>
     <div class="sub">Wołosate → Ustroń · 28 czerwca – 18 lipca · <b id="subDays"></b></div>
   </header>
 
-  <!-- znak szlaku jako główny pasek postępu -->
-  <div class="blaze-card">
-    <div class="blaze-label"><span>Przebyta trasa</span><span class="pct" id="pct">0%</span></div>
-    <div class="blaze" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="blazeBar">
-      <div class="fill" id="blazeFill"></div>
-      <div class="hiker" id="hiker">🥾</div>
+  <!-- ======== ZAKŁADKA: PODSUMOWANIE ======== -->
+  <section class="tab-panel active" id="tab-summary" data-tab="summary">
+    <!-- znak szlaku jako główny pasek postępu -->
+    <div class="blaze-card">
+      <div class="blaze-label"><span>Przebyta trasa</span><span class="pct" id="pct">0%</span></div>
+      <div class="blaze" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="blazeBar">
+        <div class="fill" id="blazeFill"></div>
+        <div class="hiker" id="hiker">🥾</div>
+      </div>
+      <div class="blaze-ends"><span>Wołosate</span><span>Ustroń</span></div>
     </div>
-    <div class="blaze-ends"><span>Wołosate</span><span>Ustroń</span></div>
-  </div>
 
-  <div class="stats">
-    <div class="stat">
-      <h3>Dni na szlaku</h3>
-      <div class="big"><span id="dDone">0</span><small> / <span id="dTotal"></span></small></div>
-      <div class="left" id="dLeft"></div>
-      <div class="mini"><i id="dBar"></i></div>
+    <div class="stats">
+      <div class="stat">
+        <h3>Dni na szlaku</h3>
+        <div class="big"><span id="dDone">0</span><small> / <span id="dTotal"></span></small></div>
+        <div class="left" id="dLeft"></div>
+        <div class="mini"><i id="dBar"></i></div>
+      </div>
+      <div class="stat">
+        <h3>Kilometry</h3>
+        <div class="big"><span id="kDone">0</span><small> / <span id="kTotal"></span> km</small></div>
+        <div class="left" id="kLeft"></div>
+        <div class="mini"><i id="kBar"></i></div>
+      </div>
+      <div class="stat">
+        <h3>Punkty GOT</h3>
+        <div class="big"><span id="gDone">0</span><small> / <span id="gTotal"></span> pkt</small></div>
+        <div class="left" id="gLeft"></div>
+        <div class="mini"><i id="gBar"></i></div>
+      </div>
     </div>
-    <div class="stat">
-      <h3>Kilometry</h3>
-      <div class="big"><span id="kDone">0</span><small> / <span id="kTotal"></span> km</small></div>
-      <div class="left" id="kLeft"></div>
-      <div class="mini"><i id="kBar"></i></div>
+
+    <p class="note">
+      Kilometraż etapów jest orientacyjny (na podstawie typowego przebiegu GSB) — punkty GOT wg planu wyprawy.
+      Ostatnia aktualizacja postępu: <b id="lastUpd">—</b>.
+    </p>
+  </section>
+
+  <!-- ======== ZAKŁADKA: MAPA ======== -->
+  <section class="tab-panel" id="tab-map" data-tab="map">
+    <div class="map-card">
+      <div id="map"></div>
+      <div class="map-legend">
+        <span class="lg"><span class="sw"></span> przebyte</span>
+        <span class="lg"><span class="sw todo"></span> przed nami</span>
+        <span class="lg">⛺ noclegi na końcach etapów</span>
+      </div>
     </div>
-    <div class="stat">
-      <h3>Punkty GOT</h3>
-      <div class="big"><span id="gDone">0</span><small> / <span id="gTotal"></span> pkt</small></div>
-      <div class="left" id="gLeft"></div>
-      <div class="mini"><i id="gBar"></i></div>
-    </div>
-  </div>
+  </section>
 
-  <div class="map-card">
-    <div id="map"></div>
-    <div class="map-legend">
-      <span class="lg"><span class="sw"></span> przebyte</span>
-      <span class="lg"><span class="sw todo"></span> przed nami</span>
-      <span class="lg">⛺ noclegi na końcach etapów</span>
-    </div>
-  </div>
+  <!-- ======== ZAKŁADKA: PLAN TRASY ======== -->
+  <section class="tab-panel" id="tab-plan" data-tab="plan">
+    <h2>Etapy</h2>
+    <div id="days"></div>
+  </section>
 
-  <h2>Etapy</h2>
-  <div id="days"></div>
-
-  <p class="note">
-    Kilometraż etapów jest orientacyjny (na podstawie typowego przebiegu GSB) — punkty GOT wg planu wyprawy.
-    Ostatnia aktualizacja postępu: <b id="lastUpd">—</b>.
-  </p>
-
-  <button class="adminlink" id="adminToggle">tryb administratora</button>
 </div>
+
+<!-- dolna nawigacja zakładek -->
+<nav class="tabbar" id="tabbar" role="tablist">
+  <button type="button" class="active" data-tab="summary" role="tab" aria-selected="true">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="20" y1="20" x2="20" y2="14"/></svg>
+    Podsumowanie
+  </button>
+  <button type="button" data-tab="map" role="tab" aria-selected="false">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+    Mapa
+  </button>
+  <button type="button" data-tab="plan" role="tab" aria-selected="false">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+    Plan trasy
+  </button>
+</nav>
 
 <!-- pasek admina -->
 <div class="adminbar">
@@ -275,6 +338,7 @@ const DAYS = [
 let completed = new Set();      // numery ukończonych dni
 let dirty = false;
 let map, doneLine, todoLine, markers = [];
+let mapFitted = false;
 
 const $ = id => document.getElementById(id);
 const sum = (arr, f) => arr.reduce((a, x) => a + f(x), 0);
@@ -309,6 +373,27 @@ function openApp(){
     if (!document.hidden && !document.body.classList.contains("admin")) loadProgress();
   });
 }
+
+/* ===================== zakładki ===================== */
+function switchTab(tab){
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("active", p.dataset.tab === tab));
+  document.querySelectorAll(".tabbar button").forEach(b => {
+    const on = b.dataset.tab === tab;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  if (tab === "map" && map){
+    requestAnimationFrame(() => {
+      map.invalidateSize();
+      if (!mapFitted){
+        const all = [[START.lat, START.lng], ...DAYS.map(x => [x.lat, x.lng])];
+        map.fitBounds(L.latLngBounds(all), { padding: [24, 24] });
+        mapFitted = true;
+      }
+    });
+  }
+}
+document.querySelectorAll(".tabbar button").forEach(b => b.addEventListener("click", () => switchTab(b.dataset.tab)));
 
 /* generator hasha: strona.html?genhash=moje-haslo */
 (async () => {
@@ -409,8 +494,6 @@ function initMap(){
     maxZoom: 15,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
   }).addTo(map);
-  const all = [[START.lat, START.lng], ...DAYS.map(x => [x.lat, x.lng])];
-  map.fitBounds(L.latLngBounds(all), { padding: [24, 24] });
 }
 function renderMapProgress(){
   if (!map) return;
